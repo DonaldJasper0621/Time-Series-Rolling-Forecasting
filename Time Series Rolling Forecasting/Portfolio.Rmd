@@ -1,0 +1,315 @@
+---
+title: "Portfolio"
+author: "111258028 經濟碩一 陳宇澤"
+date: '2023-06-04'
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, eco=FALSE, message=FALSE, warning=FALSE}
+library(tidyquant)
+library(dplyr)
+library(readxl)
+library(ggplot2)
+library(reshape2)
+library(corrplot)
+library(quadprog)
+library(fTrading)
+source("C:/Users/Eric/Downloads/所有資料/economics/R家教/function_FDA.R")
+
+```
+
+
+
+```{r, warning=FALSE}
+#選取股票代碼
+stocknames <- c("1101.TW","1707.TW","2201.TW","2303.TW","2330.TW","2376.TW","2603.TW",
+                "2609.TW","2618.TW","2882.TW","2891.TW","3045.TW","3481.TW","3708.TW",
+                "4532.TW","5243.TW","6116.TW","6505.TW","8046.TW","8454.TW")
+#抓取股票資料
+df<-tq_get(stocknames,from="2017-01-01", to="2022-12-31", get = "stock.prices")
+
+#匯入無風險利率資料
+rf<-read_excel("C:/Users/Eric/Downloads/RiskFree.xlsx")
+rf$Date<-as.Date(rf$Date)
+
+#整理資料
+df_stock<-data.frame()
+df_stock[1:length(unique(df$date)),1]<-df %>%
+  select(date)%>%
+  unique()
+
+#取出收盤價
+for(i in 1:length(stocknames)){
+  df_stock[1:length(unique(df$date)),(i+1)] <- df$close[which(df$symbol==unique(df$symbol)[i])]
+}
+
+#資料命名
+colnames(df_stock)<-c("Date",stocknames)
+
+#rf併入df_stock
+df_stock<-df_stock %>%
+  na.omit()
+
+#整理rf
+rf<-merge(rf,df_stock,all.y = T)%>%
+  select(Date, rf) %>%
+  na.omit()
+
+#計算各股報酬率
+df_ret<-data.frame()
+df_ret[1:nrow(df_stock),1]<-df_stock$Date
+for(i in 2:ncol(df_stock)){
+  df_ret[1:nrow(df_stock),i]<-c(NA,df_stock[-1,i]/df_stock[-nrow(df_stock),i]-1)
+}
+
+colnames(df_ret)<-c("Date",stocknames)
+df_ret<-df_ret %>%
+  na.omit()
+
+#計算累計報酬
+df_ret_cum<-data.frame(Date=df_ret$Date)
+df_ret_cum[,2:21]<-apply(1+df_ret[,2:21],2,cumprod)
+colnames(df_ret_cum)<-c("Date",stocknames)
+
+#time series plot of return
+par(mfrow=c(2,2))
+for(i in 2:21){
+  plot(df_ret$Date,df_ret[,i],type="l",xlab="Date",ylab="Return",
+       main=names(df_ret)[i])
+}
+
+#time series plot of price
+
+#使資料格式符合ggplot
+df_stock_long <- melt(df_stock, id.vars = "Date", variable.name = "Stock", value.name = "Price")
+# 利用ggplot繪製
+p <- ggplot(df_stock_long, aes(x = Date, y = Price, color = Stock)) +
+  geom_line() +
+  labs(x = "Date", y = "Price", title = "Time Series Plot of Price") +
+  scale_color_manual(values = c(1:20)) +
+  theme(legend.position = "top")+
+  scale_x_date(expand = c(0, 0))
+p
+
+#time series plot of cumulative return
+df_ret_cum_long <- melt(df_ret_cum, id.vars = "Date", variable.name = "Stock", value.name = "Cum_Return")
+# 利用ggplot繪製
+p <- ggplot(df_ret_cum_long, aes(x = Date, y = Cum_Return, color = Stock)) +
+  geom_line() +
+  labs(x = "Date", y = "Cumulative Return", title = "Time Series Plot of Cumulative Return") +
+  scale_color_manual(values = c(1:20)) +
+  theme(legend.position = "top")+
+  scale_x_date(expand = c(0, 0))
+p
+
+#Return轉成百分比
+df_ret_per<-data.frame(Date=df_ret$Date)
+df_ret_per[,2:21]<-df_ret[,2:21]*100
+
+#敘述性統計
+df_summary<-apply(df_ret_per[,2:21],2,function(x){
+  c(n=length(x),
+    min=min(x),
+    max=max(x),
+    median=quantile(x,0.5),
+    mean=mean(x),
+    sd=sd(x),
+    skewneww=my_skewness(x),
+    kurtosis=my_kurtosis(x),
+    acf1=my_acf1(x),
+    VaR=VaR_samplex(x,1,0.05),
+    ES=ES_samplex(x,1,0.05),
+    LPSD=LPSDx(x,rf$rf),
+    MaxDrawdown=maxDrawdown(x))
+  })
+df_summary<-round(df_summary,3)
+df_summary
+#相關性矩陣
+library(corrplot)
+par(mfrow=c(1,1))
+corrplot(corr=round(cor(df_ret[,2:21]),1),
+         order = "original",
+         method = "color",
+         type="upper",
+         addCoef.col="black")
+#----------------------------------------------------------------------------------------
+#建立投資組合
+#fix weight portfolio
+#Equally Weighted
+portfolio<-data.frame(Date=df_ret$Date)
+portfolio$fix<-apply(df_ret_per[,2:21],1,mean,na.rm=T)  #get weighted return
+weight_fix<-rep(1/20,20)
+
+#price weighted portfolio
+df_stock_train<-df_stock[which(df_stock$Date<="2021-12-31"),]
+weight<-df_stock_train[,-1]/apply(df_stock_train[,-1],1,sum)
+weight<-apply(weight,2,mean)
+portfolio$price<-apply(df_ret_per[,-1]*weight,1,sum)
+weight_price<-weight
+
+#Minimum Variance Portfolio
+#required return = 2%
+
+df_train<-df_ret_per[which(df_ret_per$Date<="2022-01-01"),]
+
+library(quadprog)
+mvp_wx_quad<-function(r, mu_targ){      ## r: return data, mu_targ: required target expected return 
+  n<-dim(r)[2]                          ## number of assets               
+  mux<-apply(r, 2, mean, na.rm = T)     ## (in-sample) mean return vector 
+  mux<-as.matrix(mux)
+  covx<-cov(r, use = "complete.obs" )   ## sample covariance matrix, note the usage of "use" vs na.rm
+  covx<-as.matrix(covx)  
+  onex<-matrix(rep(1,n),n,1)            ## vector of ones
+  
+  A<-cbind(mux, onex)                   ## A matrix
+  b0<-matrix(c(mu_targ, 1), 2, 1)       ## b vector
+  d0<-matrix(rep(0,n), n, 1)            ## d vector
+  
+  solve.QP(Dmat = covx, dvec = d0, 
+           Amat = A, bvec = b0, meq = 2)
+}
+
+weight<-mvp_wx_quad(df_train[,-1],2)$solution
+portfolio$mvp<-apply(df_ret_per[,-1]*weight,1,sum)
+weight_mvp<-weight
+#Global Minimun Variance Portfolio
+gmvp_wx_quad<-function(r){              ## r: return data, mu_targ: required target expected return 
+  
+  n<-dim(r)[2]                          ## number of assets               
+  covx<-cov(r, use = "complete.obs" )   ## sample covariance matrix, note the usage of "use" vs na.rm
+  covx<-as.matrix(covx)  
+  onex<-matrix(rep(1,n),n,1)            ## vector of ones
+  
+  A<-onex                               ## A matrix
+  b0<-matrix(1, 1, 1)                   ## b vector
+  d0<-matrix(rep(0,n), n, 1)            ## d vector
+  
+  solve.QP(Dmat = covx, dvec = d0, 
+           Amat = A, bvec = b0, meq = 1)
+}
+weight<-gmvp_wx_quad(df_train[,-1])$solution
+portfolio$gmvp<-apply(df_ret_per[,-1]*weight,1,sum)
+weight_gmvp<-weight
+## Minimum Variance Portfolio with the risk-free asset
+train_rf<-rf[which(rf$Date=="2021-12-30"),]
+
+
+
+rf_mvp_wx_quad<-function(r, mu_targ, rf){ ## r: return data, mu_targ: required target expected return
+  ## rf: risk-free return
+  
+  n<-dim(r)[2]                          ## number of assets               
+  mux<-apply(r, 2, mean, na.rm = T)     ## (in-sample) mean return vector 
+  mux<-as.matrix(mux)
+  covx<-cov(r, use = "complete.obs" )   ## sample covariance matrix, note the usage of "use" vs na.rm
+  covx<-as.matrix(covx)  
+  onex<-matrix(rep(1,n),n,1)            ## vector of ones
+  
+  A<-mux-rf*onex                        ## A matrix
+  b0<-mu_targ-rf                        ## b vector
+  d0<-matrix(rep(0,n),n,1)              ## d vector  
+  
+  solve.QP(Dmat = covx, dvec = d0, 
+           Amat = A, bvec = b0, meq = 1)
+}
+weight<-rf_mvp_wx_quad(df_train[,-1],2,train_rf$rf)$solution
+portfolio$mvp_rf<-apply(df_ret_per[,-1]*weight,1,sum)
+weight_mvprf<-weight
+#Tangency Portfolio
+tan_wx<-function(r, rf){                     ##r: return data, rf: risk-free return              
+
+  n<-dim(r)[2]                               ##number of assets               
+  mux<-apply(r, 2, mean, na.rm = T)          ##mean return vector
+  mux<-as.matrix(mux)
+  covx<-cov(r, use = "complete.obs" )        ##sample covariance matrix, note the usage of "use" vs na.rm
+  covx<-as.matrix(covx)  
+  inv_covx<-solve(covx)                      ##inverse covariance matrix
+  onex<-matrix(rep(1,n), n, 1)               ##vector of ones
+
+  ##other vector and constant
+  rpx<-mux-rf*onex                           ##risk-premium vector 
+  Dx<-t(onex)%*%inv_covx%*%rpx
+  Dx<-as.numeric(Dx)
+  ##optimal weight vector
+  wx<-1/Dx*inv_covx%*%rpx
+  return(wx)  
+}
+weight<-tan_wx(df_train[,-1],train_rf$rf)
+portfolio$tan<-apply(df_ret_per[,-1]*weight,1,sum)
+weight_tan<-weight
+
+#Risk Parity Portfolio
+#Using Asset Risk Attribution as Weight
+weight<-diag(cov(df_train[,-1]))/sum(diag(cov(df_train[,-1])))
+portfolio$risk_parity<-apply(df_ret_per[,-1]*weight,1,sum)
+weight_riskparity<-weight
+
+#留下樣本外資料
+portfolio_out<-portfolio[which(portfolio$Date>="2022-01-01"),]
+
+
+#	Time series plots of the out-of-sample (oos) portfolio returns
+portfolio_out_long <- melt(portfolio_out, id.vars = "Date", variable.name = "Portfolio", value.name = "Return")
+# 利用ggplot繪製
+p <- ggplot(portfolio_out_long, aes(x = Date, y = Return, color = Portfolio)) +
+  geom_line() +
+  labs(x = "Date", y = "Portfolio Return", title = "Time Series Plots of the Out-Of-Sample Portfolio Returns") +
+  scale_color_manual(values = c(1:(ncol(portfolio_out)-1)) )+
+  theme(legend.position = "top")+
+  scale_x_date(expand = c(0, 0))
+p
+
+#Time series plots of the out of sample cumulative gross returns of the portfolios
+portfolio_out_cum<-data.frame(Date=portfolio_out$Date)
+portfolio_out_cum[,2:8]<-apply(1+portfolio_out[,2:8]/100,2,cumprod)
+colnames(portfolio_out_cum)<-colnames(portfolio_out)
+portfolio_out_cum_long <- melt(portfolio_out_cum, id.vars = "Date", variable.name = "Portfolio", value.name = "Cum_Return")
+# 利用ggplot繪製
+p <- ggplot(portfolio_out_cum_long, aes(x = Date, y = Cum_Return, color = Portfolio)) +
+  geom_line() +
+  labs(x = "Date", y = "Cumulative Portfolio Return", title = "Time series plots of the out of sample cumulative gross returns of the portfolios") +
+  scale_color_manual(values = c(1:(ncol(portfolio_out_cum)-1)) )+
+  theme(legend.position = "top")+
+  scale_x_date(expand = c(0, 0))
+p
+
+#樣本外投資組合敘述統計
+library(fTrading)
+df_summary<-apply(portfolio_out[,2:8],2,function(x){
+  c(n=length(x),
+    min=min(x),
+    max=max(x),
+    median=quantile(x,0.5),
+    mean=mean(x),
+    sd=sd(x),
+    skewneww=my_skewness(x),
+    kurtosis=my_kurtosis(x),
+    acf1=my_acf1(x),
+    rf=tail(rf$rf,1),
+    Sharp=(mean(x)-tail(rf$rf,1))/sd(x),
+    VaR=VaR_samplex(x,1,0.05),
+    ES=ES_samplex(x,1,0.05),
+    LPSD=LPSDx(x,tail(rf$rf,1)),
+    MaxDrawdown=maxDrawDown(x)$maxDrawDown)
+})
+df_summary<-round(df_summary,3)
+df_summary
+
+#Turnover Rate of Portfolio, HHi, and SLR
+weight<-cbind(weight_fix,weight_price,weight_mvp,weight_gmvp,weight_mvprf,weight_tan,weight_riskparity)
+colnames(weight)<-colnames(portfolio)[-1]
+turnover<-apply(weight,2,function(x){
+    ifelse(min(sum(x[which(x>0)]),abs(sum(x[which(x<0)])))/sum(x)==0,1,min(sum(x[which(x>0)]),abs(sum(x[which(x<0)])))/sum(x))
+})
+HHI<-apply(weight,2,function(x){
+  sum(x^2)
+})
+SLR<-rep(1,ncol(weight))
+apply(rbind(turnover,HHI,SLR),1,summary)
+```
+
+
+
+

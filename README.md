@@ -1,26 +1,26 @@
 # Time-Series-Rolling-Forecasting
 
-## Background
+## Preliminary Remarks
 
-The financial departments of large companies often have to make foreign currency transactions when doing international business, while hedge funds are also interested in anything that will provide an edge in predicting currency movements. Hence, both are always eager to gain a better understanding of the future direction and risk of various currencies. 
+Financial divisions within large enterprises frequently execute transactions in foreign currencies in the course of international business operations. Similarly, hedge funds are always in the hunt for strategies to gain a competitive edge in predicting currency fluctuations. As a consequence, both these parties are perpetually striving to acquire superior comprehension of the prospective trends and risks associated with diverse currencies.
 
-In this repo I have tested various time series tools in order to predict future movements in the value of the Canadian dollar versus the Japanese yen.
+In this repository, I have employed various time series instruments to envisage future fluctuations in the exchange rate of the Canadian dollar vis-a-vis the Japanese yen.
 
 - - -
-## Summary of Results
+## Synopsis of Findings
+#### Autoregressive Moving Average (ARMA) Model
 
-#### ARMA Model
-
-The ARMA model may be a good fit as the p-value for the first AR and MA component, lag 1, are less than 0.05 making it statistically significant. This indicates that there is strong evidence against the null hypothesis, as there is less than a 5% probability the null is correct. However, the model may not a good fit because the p-value for AR.L2 is above 0.05 thus making it statistically insignificant. The ARMA Model results produced a high score in AIC, BIC, and HQIC indicating that this model is not the best fit. Overall the model is most likely not a good fit.
-
-#### ARIMA Model
+The ARMA model seems to be a plausible fit, given the p-value for the primary AR and MA components (lag 1) are less than 0.05, signifying statistical significance. This suggests compelling evidence against the null hypothesis, with less than a 5% probability of the null hypothesis being correct. However, the ARMA model may not be appropriate since the p-value for AR.L2 surpasses 0.05, indicating statistical insignificance. The ARMA model results disclosed high scores in AIC, BIC, and HQIC, which signifies that this model may not be the best fit. In sum, the model is likely not an adequate fit.
 
 The p-value for each result in the ARIMA model are all greater than 0.05 thus making the model not a good fit. The AIC, BIC, and HQIC are all also relatively high. 
 
+#### Autoregressive Integrated Moving Average (ARIMA) Model
 
-#### GARCH Model
+The p-values for each output in the ARIMA model surpass 0.05, suggesting the model is not an adequate fit. The AIC, BIC, and HQIC values are also notably high.
 
-The GARCH Model is forecasting an increase in price over the next five days. However, the model is not a good fit as the p-value is far greater than 0.05
+#### Generalized Autoregressive Conditional Heteroskedasticity (GARCH) Model
+
+The GARCH model forecasts a surge in price over the forthcoming five days. Nonetheless, the model is not a satisfactory fit as the p-value is considerably greater than 0.05.
 
 
 ### Linear Regression Forecasting
@@ -29,15 +29,15 @@ The GARCH Model is forecasting an increase in price over the next five days. How
 
 In-sample Root Mean Squared Error (RMSE): 0.8342483222052092
 Out-of-Sample Root Mean Squared Error (RMSE): 0.6445828596930245
-    
-The higher RMSE result show that the sample data did not fit the model well and needs to be adjusted before it can be helpful. 
+
+The elevated RMSE values indicate that the sample data did not align well with the model and require adjustments before yielding beneficial insights.
 
 ---
 
-### Conclusion
+### Deductions
 
-Based on the time series anaysis the Yen should not be bought at this time based on the analysis. Although the currency is forecasted to increase, the model results show that the models themselves are not a good fit. There is confidence that these models are not a good fit and should not be used. 
+Drawing on the time series analysis, it is advised not to purchase yen at this juncture, despite the currency being forecasted to appreciate. The model results imply that the models are not sufficiently accurate. There is confidence that these models are inadequate and should not be utilized in their current state.
 
-The amount of volatility associated with the Yen may indicate that the currency is too risky to purchase now. Due to models producing conflicting results (i.e. ARMIA suggests that the Yen will decrease whereas the GARCH indicates that the Yen will increase), the Yen may be to risky at the moment to purchase. It is suggested to adjust the models until a good fit is found. 
+The observed volatility associated with the yen could indicate that the currency poses an excessively high risk for acquisition at present. Considering the models produce discordant predictions (i.e., the ARIMA model suggests a decrease in yen value, while the GARCH model predicts an increase), the yen might currently pose too high of a risk for procurement. It is recommended to fine-tune the models until an adequate fit is attained.
 
-Based on all the models I would not suggest using them for trading until they have been adjusted to show more promising results. Therefore, the the model performed better with data that it has not been tested on.
+Considering all the models, I would advise against deploying them for trading purposes until they have been refined to produce more encouraging results. Hence, the model demonstrated superior performance with data it has not been previously tested on.

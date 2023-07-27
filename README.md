@@ -6,7 +6,6 @@ Financial divisions within large enterprises frequently execute transactions in 
 
 In this repository, I have employed various time series instruments to envisage future fluctuations in the exchange rate of the Canadian dollar vis-a-vis the Japanese yen.
 
-- - -
 ## Synopsis of Findings
 #### Autoregressive Moving Average (ARMA) Model
 
